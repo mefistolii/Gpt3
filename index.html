@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Gemini Чат</title>
+    <style>
+        body { font-family: Arial; max-width: 600px; margin: 20px auto; padding: 20px; }
+        #chat { border: 1px solid #ccc; height: 400px; overflow-y: scroll; padding: 10px; margin-bottom: 10px; }
+        .user { background: #e3f2fd; padding: 8px; margin: 5px 0; border-radius: 5px; }
+        .bot { background: #f5f5f5; padding: 8px; margin: 5px 0; border-radius: 5px; }
+        #input { width: 70%; padding: 10px; margin-right: 10px; }
+        button { padding: 10px 20px; }
+    </style>
+</head>
+<body>
+    <h2>Gemini Чат</h2>
+    <div id="chat"></div>
+    <input type="text" id="input" placeholder="Введите сообщение..." autocomplete="off">
+    <button onclick="sendMessage()">Отправить</button>
+
+    <script>
+        const API_KEY = 'AIzaSyBPNAfUkzRpQE8N5POqD0nfIP7SDzfrR0s';
+        
+        function addMessage(text, sender) {
+            const chat = document.getElementById('chat');
+            const div = document.createElement('div');
+            div.className = sender;
+            div.textContent = text;
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+        
+        async function sendMessage() {
+            const input = document.getElementById('input');
+            const message = input.value.trim();
+            if (!message) return;
+            
+            addMessage(message, 'user');
+            input.value = '';
+            
+            try {
+                // Пробуем разные варианты endpoint'ов
+                const endpoints = [
+                    // Основные варианты
+                    `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`,
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+                    `https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro:generateContent?key=${API_KEY}`,
+                    // Без указания версии
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`,
+                    // Самый простой
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key=${API_KEY}`
+                ];
+                
+                let response = null;
+                let workingEndpoint = null;
+                
+                // Пробуем каждый endpoint
+                for (const endpoint of endpoints) {
+                    try {
+                        console.log('Пробую:', endpoint);
+                        
+                        response = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                contents: [{
+                                    parts: [{ text: "Привет, как дела?" }]
+                                }],
+                                generationConfig: {
+                                    maxOutputTokens: 50
+                                }
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            workingEndpoint = endpoint;
+                            console.log('Работает:', endpoint);
+                            break;
+                        } else {
+                            console.log('Не работает:', endpoint, response.status);
+                        }
+                    } catch (err) {
+                        console.log('Ошибка для', endpoint, err.message);
+                    }
+                }
+                
+                if (!workingEndpoint) {
+                    addMessage("Ошибка: Не удалось подключиться к API. Проверьте ключ и доступ.", 'bot');
+                    return;
+                }
+                
+                // Отправляем реальное сообщение через рабочий endpoint
+                const finalResponse = await fetch(workingEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{ text: message }]
+                        }],
+                        generationConfig: {
+                            maxOutputTokens: 500,
+                            temperature: 0.7
+                        }
+                    })
+                });
+                
+                if (!finalResponse.ok) {
+                    throw new Error(`HTTP ошибка: ${finalResponse.status}`);
+                }
+                
+                const data = await finalResponse.json();
+                
+                if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+                    const reply = data.candidates[0].content.parts[0].text;
+                    addMessage(reply, 'bot');
+                } else {
+                    addMessage("Ошибка: Непонятный ответ от API", 'bot');
+                }
+                
+            } catch (error) {
+                console.error('Ошибка:', error);
+                addMessage(`Ошибка: ${error.message}`, 'bot');
+                addMessage("Попробуйте создать новый API ключ в Google AI Studio", 'bot');
+            }
+        }
+        
+        document.getElementById('input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+        
+        addMessage("Привет! Напишите мне что-нибудь.", 'bot');
+    </script>
+</body>
+</html>
